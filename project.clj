@@ -4,7 +4,7 @@
   :license {:name "MIT License"
             :url "http://dd.mit-license.org"}
   :dependencies [[org.clojure/clojure "1.4.0"]
-                 [com.cemerick/friend "0.1.2"]
+                 [com.cemerick/friend "0.1.3"]
                  [ring "1.1.6"]
                  [clj-http "0.5.3"]
                  [cheshire "4.0.2"]]
