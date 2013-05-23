@@ -13,6 +13,7 @@
                  [crypto-random "1.1.0"]]
 
   :plugins [[lein-midje "3.0.0"]
+            [lein-ring "0.8.3" :exclusions [org.clojure/clojure]]
             [codox "0.6.4"]]
 
   :profiles {:dev

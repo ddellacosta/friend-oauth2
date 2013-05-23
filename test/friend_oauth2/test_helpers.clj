@@ -76,9 +76,9 @@
     test-app-routes
     {:allow-anon? true
      :workflows [(friend-oauth2/workflow
-                  {:client-config client-config-fixture
-                   :uri-config uri-config-fixture
-                   :config-auth {:roles #{::user}}})]})))
+                  :client-config client-config-fixture
+                  :uri-config uri-config-fixture
+                  :config-auth {:roles #{::user}})]})))
 
 (defn setup-valid-state
   "Initiates login to provide valid state for later requests."

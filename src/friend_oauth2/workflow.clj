@@ -16,11 +16,12 @@
 (defn format-authentication-uri
   "Formats the client authentication uri"
   [{:keys [authentication-uri]} anti-forgery-token]
-  (str (:url authentication-uri) "?"
-       (ring-codec/form-encode
-        (merge
-         {:state anti-forgery-token}
-         (:query authentication-uri)))))
+  (let [{:keys [url query]} authentication-uri
+        params  (-> query
+                    (assoc :state anti-forgery-token) ; overrides any :state in query
+                    ring-codec/form-encode)]
+    (str url "?" params))) ;; TODO: use cemerick/url
+
 
 (defn replace-authorization-code
   "Formats the token uri with the authorization code"
@@ -31,9 +32,10 @@
 (defn extract-access-token
   "Returns the access token from a JSON response body"
   [response]
-  (:access_token
-   (clojure.walk/keywordize-keys
-    (j/parse-string (:body response)))))
+  (-> response
+      :body
+      (j/parse-string true)
+      :access_token ))
 
 (defn extract-anti-forgery-token
   "Extracts the anti-csrf state key from the response"
@@ -45,8 +47,13 @@
     nil))
 
 (defn generate-anti-forgery-token []
-  (clojure.string/join
-   (clojure.string/split (random/base64 60) #"/")))
+  (-> 60
+      random/base64
+      (clojure.string/split  #"/")
+      clojure.string/join
+      keyword))
+
+
 
 (defn make-auth
   "Creates the auth-map for Friend"
@@ -55,57 +62,59 @@
     {:type ::friend/auth
      ::friend/workflow :email-login
      ::friend/redirect-on-auth? true}))
-  
+
 (defn workflow
   "Workflow for OAuth2"
-  [config]
+  [& {:keys [login-uri uri-config client-config
+             access-token-parsefn config-auth ] :as config
+      :or {login-uri nil
+           access-token-parsefn extract-access-token
+           config-auth nil}}]
+
   (fn [request]
+    (let [path-info (ring-request/path-info request)]
+      ;; If we have a callback for this workflow
+      ;; or a login URL in the request, process it.
+      (if (some (partial = path-info)
+                [(-> client-config :callback :path)
+                 login-uri
+                 (-> request ::friend/auth-config :login-uri)])
 
-    ;; If we have a callback for this workflow
-    ;; or a login URL in the request, process it.
-    (if (or (= (ring-request/path-info request)
-               (-> config :client-config :callback :path))
-            (= (ring-request/path-info request)
-               (or (:login-uri config) (-> request ::friend/auth-config :login-uri))))
+        ;; Steps 2 and 3:
+        ;; accept auth code callback, get access_token (via POST)
 
-      ;; Steps 2 and 3:
-      ;; accept auth code callback, get access_token (via POST)
+        ;; http://tools.ietf.org/html/draft-ietf-oauth-v2-31#section-4.1.2
+        (let [{:keys [params code session]
+               :or {code nil
+                    session nil}} request
+                    session-state  (extract-anti-forgery-token request)]
 
-      ;; http://tools.ietf.org/html/draft-ietf-oauth-v2-31#section-4.1.2
-      (let [params         (:params request)
-            code           (:code params)
-            response-state (:state params)
-            session-state  (extract-anti-forgery-token request)]
+          (if (and (not (nil? code))
+                   (= (:state params) session-state))
 
-        (if (and (not (nil? code))
-                 (= response-state session-state))
+            (let [access-token-uri (:access-token-uri uri-config )
+                  token-url (assoc-in access-token-uri [:query]
+                                      (merge {:grant_type "authorization_code"}
+                                             (replace-authorization-code access-token-uri code)))
+                  ;; Step 4:
+                  ;; access_token response. Custom function for handling
+                  ;; response body is passed in via the :access-token-parsefn
+                  access-token (-> token-url
+                                   :url
+                                   (client/post {:form-params (:query token-url)})
+                                   access-token-parsefn)]
 
-          (let [access-token-uri (-> config :uri-config :access-token-uri)
-                token-url (assoc-in access-token-uri [:query]
-                                    (merge {:grant_type "authorization_code"}
-                                           (replace-authorization-code access-token-uri code)))
-                token-response (client/post
-                                (:url token-url)
-                                {:form-params (:query token-url)})
 
-                ;; Step 4:
-                ;; access_token response. Custom function for handling
-                ;; response body is passed in via the :access-token-parsefn
+              ;; The auth map for a successful authentication:
+              (make-auth (merge {:identity access-token
+                                 :access_token access-token}
+                                config-auth)))
 
-                access-token ((or (:access-token-parsefn config)
-                                  extract-access-token)
-                              token-response)]
+            ;; Step 1: redirect to OAuth2 provider.  Code will be in response.
+            (let [anti-forgery-token    (generate-anti-forgery-token)
+                  session-with-af-token (assoc session anti-forgery-token "state")]
+              (-> uri-config
+                  (format-authentication-uri  anti-forgery-token)
+                  ring.util.response/redirect
+                  (assoc :session session-with-af-token)))))))))
 
-            ;; The auth map for a successful authentication:
-            (make-auth (merge {:identity access-token
-                               :access_token access-token}
-                              (:config-auth config))))
-
-          ;; Step 1: redirect to OAuth2 provider.  Code will be in response.
-          (let [anti-forgery-token    (generate-anti-forgery-token)
-                session-with-af-token (assoc (:session request)
-                                        (keyword anti-forgery-token) "state")]
-            (assoc
-                (ring.util.response/redirect
-                 (format-authentication-uri (:uri-config config) anti-forgery-token))
-              :session session-with-af-token)))))))
