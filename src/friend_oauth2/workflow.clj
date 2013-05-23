@@ -21,15 +21,17 @@
 (defn replace-authorization-code
   "Formats the token uri with the authorization code"
   [uri-config code]
-  (assoc-in (uri-config :query) [:code] code))
+  (assoc-in (:query uri-config) [:code] code))
 
 ;; http://tools.ietf.org/html/draft-ietf-oauth-v2-31#section-5.1
 (defn extract-access-token
   "Returns the access token from a JSON response body"
   [response]
-  ((clojure.walk/keywordize-keys
-    (j/parse-string (response :body)))
-   :access_token))
+  (-> response
+      :body
+      (j/parse-string true)
+      :access_token ))
+    
 
 (defn make-auth
   "Creates the auth-map for Friend"
@@ -38,41 +40,45 @@
     {:type ::friend/auth
      ::friend/workflow :email-login
      ::friend/redirect-on-auth? true}))
-  
+
 (defn workflow
   "Workflow for OAuth2"
-  [config]
+  [& {:keys [login-uri uri-config client-config
+             access-token-parsefn config-auth ] :as config
+      :or {login-uri nil
+           access-token-parsefn extract-access-token
+           config-auth nil}}]
   (fn [request]
+    (let [path-info (ring-request/path-info request)]
+      ;; If we have a callback for this workflow
+      ;; or a login URL in the request, process it.
+      (if (some (partial = path-info)
+                [(-> client-config :callback :path)
+                 login-uri
+                 (-> request ::friend/auth-config :login-uri)])
 
-    ;; If we have a callback for this workflow
-    ;; or a login URL in the request, process it.
-    (if (or (= (ring-request/path-info request)
-               (-> config :client-config :callback :path))
-            (= (ring-request/path-info request)
-               (or (:login-uri config) (:login-uri (::friend/auth-config request)))))
+        ;; Steps 2 and 3:
+        ;; accept auth code callback, get access_token (via POST)
 
-      ;; Steps 2 and 3:
-      ;; accept auth code callback, get access_token (via POST)
+        ;; http://tools.ietf.org/html/draft-ietf-oauth-v2-31#section-4.1.2
+        (if-let [code (-> request :params :code)]
+          (let [access-token-uri (:access-token-uri uri-config )
+                token-url (assoc-in access-token-uri [:query]
+                                    (replace-authorization-code access-token-uri code))
+                ;; Step 4:
+                ;; access_token response. Custom function for handling
+                ;; response body is pass in via the :access-token-parsefn
+                access-token (access-token-parsefn
+                              (client/post
+                               (:url token-url)
+                               {:form-params (:query token-url)}))]
 
-      ;; http://tools.ietf.org/html/draft-ietf-oauth-v2-31#section-4.1.2
-      (if-let [code (-> request :params :code)]
-        (let [access-token-uri ((config :uri-config) :access-token-uri)
-              token-url (assoc-in access-token-uri [:query]
-                                  (replace-authorization-code access-token-uri code))
-              ;; Step 4:
-              ;; access_token response. Custom function for handling
-              ;; response body is pass in via the :access-token-parsefn
-              access-token ((or (config :access-token-parsefn)
-                                extract-access-token)
-                            (client/post
-                             (:url token-url)
-                             {:form-params (:query token-url)}))]
+            ;; The auth map for a successful authentication:
+            (make-auth (merge {:identity access-token
+                               :access_token access-token}
+                              config-auth)))
+                              
 
-          ;; The auth map for a successful authentication:
-          (make-auth (merge {:identity access-token
-                             :access_token access-token}
-                            (:config-auth config))))
-
-        ;; Step 1: redirect to OAuth2 provider.  Code will be in response.
-        (ring.util.response/redirect
-         (format-authentication-uri (config :uri-config)))))))
+          ;; Step 1: redirect to OAuth2 provider.  Code will be in response.
+          (ring.util.response/redirect
+           (format-authentication-uri uri-config)))))))

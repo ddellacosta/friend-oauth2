@@ -33,9 +33,9 @@
 
 ;; Default workflow function with above config
 (defn default-workflow-function [request-or-response]
-  ((friend-oauth2/workflow {:client-config client-config-fixture
+  ((friend-oauth2/workflow :client-config client-config-fixture
                             :uri-config uri-config-fixture
-                            :login-uri "/login"})  ;; Friend provides this normally.
+                            :login-uri "/login")  ;; Friend provides this normally.
    request-or-response))
 
 (def identity-fixture
