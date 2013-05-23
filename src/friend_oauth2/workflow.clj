@@ -68,10 +68,10 @@
                 ;; Step 4:
                 ;; access_token response. Custom function for handling
                 ;; response body is pass in via the :access-token-parsefn
-                access-token (access-token-parsefn
-                              (client/post
-                               (:url token-url)
-                               {:form-params (:query token-url)}))]
+                access-token (-> token-url
+                                 :url
+                                 (client/post  {:form-params (:query token-url)})
+                                 access-token-parsefn)]
 
             ;; The auth map for a successful authentication:
             (make-auth (merge {:identity access-token
