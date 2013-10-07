@@ -11,14 +11,6 @@
    [ring.mock.request :as ring-mock]))
 
 (fact
- "Creates the auth-map for Friend with proper meta-data"
- (meta (oauth2/make-auth identity-fixture))
- =>
- {:type ::friend/auth
-  ::friend/workflow :email-login
-  ::friend/redirect-on-auth? true})
-
-(fact
  "A user can authenticate via OAuth2
  (tests 'happy path' for the whole process)."
 

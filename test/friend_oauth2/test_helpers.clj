@@ -62,7 +62,9 @@
      :workflows [(oauth2/workflow
                   {:client-config client-config-fixture
                    :uri-config uri-config-fixture
-                   :config-auth {:roles #{::user}}})]})))
+                   :credential-fn (fn [token]
+                                    {:identity token
+                                     :roles #{::user}})})]})))
 
 (defn setup-valid-state
   "Initiates login to provide valid state for later requests.

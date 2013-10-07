@@ -23,7 +23,10 @@ Somewhere in your code, maybe in your handler:
 Set your OAuth2 provider settings (using [Google APIs OAuth2](https://developers.google.com/accounts/docs/OAuth2) as an example): 
 
 ```clojure
-(def config-auth {:roles #{::oauth2-user}})
+(defn credential-fn
+  [token]
+  ;;lookup token in DB or whatever to fetch appropriate :roles
+  {:identity token :roles #{::user}})
 
 (def client-config
   {:client-id "123456789012.apps.googleusercontent.com"
@@ -52,7 +55,7 @@ Then add the workflow to your handler per normal Friend configuration:
    :workflows   [(oauth2/workflow
                   {:client-config client-config
                    :uri-config uri-config
-                   :config-auth config-auth})]})
+                   :credential-fn credential-fn})]})
 
 (def app
   (-> ring-app

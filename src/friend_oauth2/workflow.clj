@@ -5,13 +5,9 @@
    [clj-http.client :as client]
    [ring.util.request :as request]))
 
-(defn make-auth
-  "Creates the auth-map for Friend"
-  [identity]
-  (with-meta identity
-    {:type ::friend/auth
-     ::friend/workflow :email-login
-     ::friend/redirect-on-auth? true}))
+(defn- default-credential-fn
+  [creds]
+  {:identity (:access-token creds)})
 
 (defn- is-oauth2-callback?
   [config request]
@@ -53,7 +49,9 @@
         (if (and (not (nil? code))
                  (= state session-state))
           (when-let [access-token (request-token config code)]
-            (make-auth (merge {:identity access-token
-                               :access_token access-token}
-                              (:config-auth config))))
+            (when-let [auth-map ((:credential-fn config default-credential-fn)
+                                 {:access-token access-token})]
+              (vary-meta auth-map merge {::friend/workflow :oauth2
+                                         ::friend/redirect-on-auth? true
+                                         :type ::friend/auth})))
           (redirect-to-provider! config request))))))
