@@ -50,6 +50,9 @@
       (make-cookie-request ring-session-val)
       test-app))
 
+
+
+
 (defroutes test-app-routes
   (GET "/authlink" request
        (friend/authorize #{::user} "Authorized page.")))
@@ -67,6 +70,28 @@
                    :credential-fn (fn [token]
                                     {:identity token
                                      :roles #{::user}})})]})))
+
+(def test-app-multi
+  (handler/site
+   (friend/authenticate
+    test-app-routes
+    {:allow-anon? true
+     :workflows [(oauth2/workflow-multi
+                  {:providers providers
+                   :auth-error-fn (fn [error]
+                                    (ring.util.response/response error))
+                   :pre-login-fn (fn [multi-config]
+                                   (ring.util.response/response "select provider"))
+                   :credential-fn (fn [token]
+                                    {:identity token
+                                     :roles #{::user}})})]})))
+
+(defn make-session-get-request-multi
+  [path params ring-session-val]
+  (-> (ring-mock/request :get path params)
+      (make-cookie-request ring-session-val)
+      test-app-multi))
+
 
 (defn setup-valid-state
   "Initiates login to provide valid state for later requests.
