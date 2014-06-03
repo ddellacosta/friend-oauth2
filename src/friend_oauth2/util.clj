@@ -28,6 +28,14 @@
   [{body :body}]
   (-> body (parse-string true) :access_token))
 
+(defn make-access-token-parser
+  "creates an fn [resp] that applies the provided parser and
+   wraps its result (if available) in a map"
+  [parser]
+  (fn [token-resp]
+    (when-let [t (extract-access-token token-resp)]
+      {:access-token t})))
+
 (defn get-access-token-from-params
   "Alternate function to allow retrieve
    access_token when passed in as form params."
