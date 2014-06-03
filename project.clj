@@ -4,7 +4,7 @@
   :license {:name "MIT License"
             :url "http://dd.mit-license.org"}
 
-  :dependencies [[org.clojure/clojure "1.6.0"]
+  :dependencies [[org.clojure/clojure "1.5.1"]
                  [com.cemerick/friend "0.2.0"];; :exclusions [ring/ring-core slingshot]]
                  [ring "1.2.0"]
                  [ring/ring-codec "1.0.0"]
@@ -12,11 +12,11 @@
                  [cheshire "5.2.0"]
                  [crypto-random "1.1.0"]]
 
-  :plugins [[lein-midje "3.1.3"]
+  :plugins [[lein-midje "3.1.2"]
             [codox "0.6.6"]]
 
   :profiles {:dev
              {:dependencies [[ring-mock "0.1.5"]
-                             [midje "1.6.3"];; :exclusions [org.clojure/core.incubator joda-time]]
+                             [midje "1.5.1"];; :exclusions [org.clojure/core.incubator joda-time]]
                              [com.cemerick/url "0.1.0"];; :exclusions [org.clojure/core.incubator]]
                              [compojure "1.1.5"]]}})
