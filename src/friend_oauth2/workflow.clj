@@ -17,15 +17,18 @@
          (or (:login-uri config) (-> request ::friend/auth-config :login-uri)))))
 
 (defn- request-token
-  "POSTs request to OAauth2 provider for authorization token."
-  [{:keys [uri-config access-token-parsefn]} code]
+  "Exchanges authorization code for access token & refresh token if provided. Response
+   from provider is parsed with response-parse-fn if provided, otherwise access-token-parsefn
+   is used if given."
+  [{:keys [uri-config access-token-parsefn response-parse-fn]} code]
   (let [access-token-uri (:access-token-uri uri-config)
-        query-map        (merge {:grant_type "authorization_code"}
-                                (util/replace-authz-code access-token-uri code))
-        token-url        (assoc access-token-uri :query query-map)
-        token-response   (client/post (:url token-url) {:form-params (:query token-url)})
-        token-parse-fn   (or access-token-parsefn util/extract-access-token)]
-    (token-parse-fn token-response)))
+        query-map        (assoc (util/replace-authz-code access-token-uri code)
+                           :grant_type "authorization_code")
+        token-parse-fn (or response-parse-fn
+                           (util/make-access-token-parser (or access-token-parsefn
+                                                                util/extract-access-token)))]
+    (token-parse-fn (client/post (:url access-token-uri)
+                                 {:form-params query-map}))))
 
 (defn- redirect-to-provider!
   "Redirects user to OAuth2 provider. Code should be in response."
@@ -48,9 +51,9 @@
             session-state        (util/extract-anti-forgery-token request)]
         (if (and (not (nil? code))
                  (= state session-state))
-          (when-let [access-token (request-token config code)]
+          (when-let [token (request-token config code)]
             (when-let [auth-map ((:credential-fn config default-credential-fn)
-                                 {:access-token access-token})]
+                                 token)]
               (vary-meta auth-map merge {::friend/workflow :oauth2
                                          ::friend/redirect-on-auth? true
                                          :type ::friend/auth})))
