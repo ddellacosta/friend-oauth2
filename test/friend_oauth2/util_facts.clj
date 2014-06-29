@@ -41,3 +41,11 @@
  "Replaces the authorization code"
  ((oauth2-util/replace-authz-code (uri-config-fixture :access-token-uri) "my-code") :code)
  => "my-code")
+
+(fact
+ "Returns the config key of the first provider in which callback uri matches the path-info of request"
+ (oauth2-util/get-provider (ring-mock/request :get "/auth/a") {:providers providers}) => :a)
+
+(fact
+ "Returns nil if no provider's callback uri matches the path-info of request"
+ (oauth2-util/get-provider (ring-mock/request :get "/auth/z") {:providers providers}) => nil)

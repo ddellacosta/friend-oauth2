@@ -2,6 +2,7 @@
   (:require
    [cheshire.core :refer [parse-string]]
    [ring.util.codec :as ring-codec]
+   [ring.util.request :as request]
    [clojure.string :refer [split join]]
    [crypto.random :as random]))
 
@@ -44,3 +45,11 @@
   "Generates random string for anti-forgery-token."
   []
   (-> (random/base64 60) (split #"/") join))
+
+(defn get-provider
+  [request multi-config]
+  (let [path (request/path-info request)
+        providers (:providers multi-config)]
+    
+    (first (first (filter #(= path
+                       (get-in (second %) [:client-config :callback :path])) providers)))))

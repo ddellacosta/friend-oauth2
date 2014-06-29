@@ -42,7 +42,7 @@
     (when (is-oauth2-callback? config request)
       ;; Extracts code from request if we are getting here via OAuth2 callback.
       ;; http://tools.ietf.org/html/draft-ietf-oauth-v2-31#section-4.1.2
-      (let [{:keys [state code]} (:params request)
+      (let [{:keys [state code error]} (:params request)
             session-state        (util/extract-anti-forgery-token request)]
         (if (and (not (nil? code))
                  (= state session-state))
@@ -52,4 +52,26 @@
               (vary-meta auth-map merge {::friend/workflow :oauth2
                                          ::friend/redirect-on-auth? true
                                          :type ::friend/auth})))
-          (redirect-to-provider! config request))))))
+         
+          (let [auth-error-fn (:auth-error-fn config)]
+            (if (and error auth-error-fn)
+              (auth-error-fn error)
+              (redirect-to-provider! config request))))))))
+
+(defn workflow-multi
+  "Workflow that supports multiple providers"
+  [multi-config]
+  (fn [request]
+  ;; if we had intercepted login uri, execute pre-login-fn if provided
+  ;; else check if the url belongs to which provider and return a
+  ;; provider function
+    (if  (= (request/path-info request)
+            (or (:login-uri multi-config) (-> request ::friend/auth-config :login-uri)))
+      (if-let [pre-login-fn (:pre-login-fn multi-config)]
+        (pre-login-fn multi-config))
+      
+      (when-let [provider (util/get-provider request multi-config)]
+        (let [provider-config (get-in multi-config [:providers provider])
+              wf-config (dissoc multi-config :providers)
+              wf-config (merge wf-config provider-config)]
+        ((workflow wf-config) request))))))
