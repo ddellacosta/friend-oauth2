@@ -18,7 +18,8 @@ Somewhere in your code, maybe in your handler:
 ```clojure
 (ns <your ns>
   (:require [cemerick.friend :as friend]
-            [friend-oauth2.workflow :as oauth2])
+            [friend-oauth2.workflow :as oauth2]
+            [friend-oauth2.util :refer [format-config-uri]])
 ```
 
 Set your OAuth2 provider settings (using [Google APIs OAuth2](https://developers.google.com/accounts/docs/OAuth2) as an example): 
