@@ -13,9 +13,13 @@
 (defn format-authn-uri
   "Formats the client authentication uri"
   [{{:keys [query url]} :authentication-uri} anti-forgery-token]
-  (->> (assoc query :state anti-forgery-token)
-       ring-codec/form-encode
-       (str url "?")))
+  (let [missing-keys (keys (filter (comp nil? val) query))]
+    (do
+      (when-not (empty? missing-keys)
+        (throw (Exception. (str "Missing values for query params:" missing-keys))))
+      (->> (assoc query :state anti-forgery-token)
+        ring-codec/form-encode
+        (str url "?")))))
 
 (defn replace-authz-code
   "Formats the token uri with the authorization code"

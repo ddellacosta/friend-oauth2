@@ -38,6 +38,12 @@
                           "state"        "anti-forgery-token"}))
 
 (fact
+  "Throws an exception for nil query param values"
+  (oauth2-util/format-authn-uri
+    {:authentication-uri {:query {:foo nil} :url "https://foo.com"}} "token") =>
+    (throws Exception))
+
+(fact
  "Replaces the authorization code"
  ((oauth2-util/replace-authz-code (uri-config-fixture :access-token-uri) "my-code") :code)
  => "my-code")
