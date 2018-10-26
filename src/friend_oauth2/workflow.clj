@@ -81,32 +81,45 @@
         :client-config (config/->client-cfg cfg)
         :uri-config (config/->uri-cfg cfg)))))
 
+(defn- apply-workflow
+  "Workflow for OAuth2"
+  [cfg request]
+  (when (is-oauth2-callback? cfg request)
+    ;; Extracts code from request if we are getting here via OAuth2 callback.
+    ;; http://tools.ietf.org/html/draft-ietf-oauth-v2-31#section-4.1.2
+    (let [{:keys [state code error]} (:params request)
+          session-state (util/extract-anti-forgery-token request)]
+      (log/debug "state:" state)
+      (log/debug "code:" code)
+      (log/debug "error:" error)
+      (log/debug "session-state:" session-state)
+      (if (and (not (nil? code))
+               (= state session-state))
+        (when-let [access-token (request-token cfg code)]
+          (when-let [auth-map ((:credential-fn cfg
+                                               default-credential-fn)
+                               {:access-token access-token})]
+            (vary-meta auth-map merge {::friend/workflow :oauth2
+                                       ::friend/redirect-on-auth? true
+                                       :type ::friend/auth})))
+        (let [auth-error-fn (:auth-error-fn cfg)]
+          (if (and error auth-error-fn)
+            (auth-error-fn error)
+            (redirect-to-provider! cfg request)))))))
+
 (defn workflow
   "Workflow for OAuth2"
   [args]
   (let [cfg (process-config args)]
     (log/trace "Config:\n" (logger/pprint cfg))
-    (fn [request]
-      (log/trace "Request:\n" (logger/pprint request))
-      (when (is-oauth2-callback? cfg request)
-        ;; Extracts code from request if we are getting here via OAuth2 callback.
-        ;; http://tools.ietf.org/html/draft-ietf-oauth-v2-31#section-4.1.2
-        (let [{:keys [state code error]} (:params request)
-              session-state (util/extract-anti-forgery-token request)]
-          (log/debug "state:" state)
-          (log/debug "code:" code)
-          (log/debug "error:" error)
-          (log/debug "session-state:" session-state)
-          (if (and (not (nil? code))
-                   (= state session-state))
-            (when-let [access-token (request-token cfg code)]
-              (when-let [auth-map ((:credential-fn cfg
-                                                   default-credential-fn)
-                                   {:access-token access-token})]
-                (vary-meta auth-map merge {::friend/workflow :oauth2
-                                           ::friend/redirect-on-auth? true
-                                           :type ::friend/auth})))
-            (let [auth-error-fn (:auth-error-fn cfg)]
-              (if (and error auth-error-fn)
-                (auth-error-fn error)
-                (redirect-to-provider! cfg request)))))))))
+    (fn 
+      ([request] 
+        (log/trace "Request:\n" (logger/pprint request))
+        (apply-workflow cfg request))
+      ([request respond raise]
+        (log/trace "Request:\n" (logger/pprint request))
+        (try
+          (let [response (apply-workflow cfg request)]
+            (respond response))
+          (catch Exception e
+            (raise e)))))))
